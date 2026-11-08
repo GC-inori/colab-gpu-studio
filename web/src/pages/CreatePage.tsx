@@ -290,7 +290,9 @@ export function CreatePanel({
         </Card>
       )}
 
-      {/* 6 素材 */}
+        </div>
+        <div className={styles.createSideCol}>
+          {/* 6 素材 */}
       {manifest && (split.assets.length > 0 || supportsReferences(manifest)) && (
         <Card icon={<ImageIcon size={17} strokeWidth={1.6} aria-hidden />} title="参考素材">
           <GpuParamForm section="assets" manifest={manifest} values={params} assets={gallery} uploadProgress={uploadProgress}

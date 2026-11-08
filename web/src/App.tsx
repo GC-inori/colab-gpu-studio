@@ -759,6 +759,76 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* 桌面端 iOS/macOS 风格侧边栏 */}
+      <aside className="desktopSidebar" aria-label="侧边栏导航">
+        <div className="sidebarHeader">
+          <div className="brand">
+            <span className="brandMark"><Triangle size={17} strokeWidth={1.8} aria-hidden /></span>
+            <div className="brandText">
+              <strong>Colab GPU Studio</strong>
+              <small>{settings?.offline_mode ? '离线演示' : 'AI 创作工作台'}</small>
+            </div>
+          </div>
+        </div>
+
+        <div className="sidebarProjectBox">
+          <button className="sidebarProjectBtn" type="button" aria-label="切换项目" onClick={() => setShowProjectSheet(true)}>
+            <Folder size={15} strokeWidth={1.6} aria-hidden />
+            <span>{activeProject ? activeProject.title : '默认项目'}</span>
+            <ChevronDown size={14} strokeWidth={1.6} aria-hidden />
+          </button>
+          <button className="iconButton" type="button" aria-label="新建项目" title="新建项目" onClick={() => setShowNewProject(true)}>
+            <Plus size={16} strokeWidth={1.6} aria-hidden />
+          </button>
+        </div>
+
+        <nav className="sidebarNav" aria-label="桌面导航">
+          {tabs.map((item) => {
+            const Icon = item === '创作' ? Sparkles : item === '任务' ? Zap : item === '作品' ? ImageIcon : Cpu;
+            const active = tab === item;
+            return (
+              <button
+                key={item}
+                type="button"
+                className={`sidebarNavItem ${active ? 'active' : ''}`}
+                onClick={() => setTab(item)}
+              >
+                <Icon size={18} strokeWidth={1.6} aria-hidden />
+                <span>{item}</span>
+                {item === '任务' && activeJobsCount > 0 && <span className="tabBadge">{activeJobsCount}</span>}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            className={`sidebarNavItem ${tab === '设置' ? 'active' : ''}`}
+            onClick={() => setTab('设置')}
+          >
+            <SettingsIcon size={18} strokeWidth={1.6} aria-hidden />
+            <span>设置</span>
+          </button>
+        </nav>
+
+        <div className="sidebarFooter">
+          <div className="sidebarStatusCard">
+            <div className="sidebarStatusRow">
+              <span className={`statusDot ${settings?.provider_default === 'mock' ? '' : 'active'}`} />
+              <small className="muted">{settings?.provider_default === 'mock' ? '模拟模式' : 'Colab 引擎就绪'}</small>
+            </div>
+            {usage?.daily_limit ? (
+              <div className="sidebarQuotaProgress">
+                <div className="sidebarQuotaMeta">
+                  <small className="muted">今日额度</small>
+                  <small><strong>{Math.round(usage.actual_units || usage.estimated_units || 0)}</strong> / {usage.daily_limit} CU</small>
+                </div>
+                <div className="progressMini">
+                  <span style={{ width: `${Math.min(100, Math.round(((usage.actual_units || usage.estimated_units || 0) / usage.daily_limit) * 100))}%` }} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </aside>
       <header className="topbar">
         <div className="brand">
           <span className="brandMark"><Triangle size={16} strokeWidth={1.6} aria-hidden /></span>
