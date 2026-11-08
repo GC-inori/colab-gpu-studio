@@ -736,6 +736,9 @@ def workflow_activation(
     smoke = jobs[0] if jobs else None
     smoke_state = (smoke or {}).get("state")
     smoke_done = bool(row.get("smoke_test_passed")) and row.get("smoke_test_kind") == "real"
+    smoke_completed = smoke_done or bool(
+        smoke and smoke_state == "completed" and smoke.get("output_asset_ids")
+    )
     published = row.get("state") == "published"
     validated = row.get("state") in {"validated", "published"}
     model_reviewed = bool(model and model.get("review_approved") and model.get("license_accepted"))
@@ -758,7 +761,7 @@ def workflow_activation(
         {
             "key": "real_smoke",
             "label": "真实 GPU 冒烟（≤5 分钟）",
-            "done": smoke_done,
+            "done": smoke_completed,
             "running": bool(smoke_state and smoke_state not in {"completed", "failed", "cancelled"}),
             "failed": smoke_state == "failed",
         },

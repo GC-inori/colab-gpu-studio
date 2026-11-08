@@ -98,6 +98,10 @@ class GoogleService:
             legacy_default = owner and AccountService.default_account_id(owner)
         except (AttributeError, TypeError, ValueError):
             legacy_default = None
+        # The wildcard is used only by aggregate status reporting. Normal OAuth
+        # and token operations remain scoped to one account.
+        if account == "*":
+            return True
         if account is None:
             return row_account in (None, "", legacy_default)
         if row_account == account:
@@ -241,11 +245,14 @@ class GoogleService:
         ]
         return rows[0] if rows else None
 
-    def status(self) -> dict:
+    def status(self, account_id: str | None = None) -> dict:
         configured = all(self._config_value())
         result: dict[str, dict[str, Any]] = {}
+        effective_account = self.account_id if account_id is None else account_id
         for purpose in _PURPOSES:
-            credential = self._credential(purpose, account_id=self.account_id)
+            credential = self._credential(
+                purpose, account_id=effective_account if effective_account is not None else "*"
+            )
             scope_ok = bool(credential and self._scope_sufficient(purpose, credential.get("scope")))
             connected = bool(credential and credential.get("encrypted_refresh_token") and scope_ok)
             cred_configured = bool(

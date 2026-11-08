@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Zap, Search, RefreshCw, Image as ImageIcon, Film, Loader, ChevronRight, Square, RotateCcw } from 'lucide-react';
+import { Zap, Search, RefreshCw, Image as ImageIcon, Film, Loader, ChevronRight, Square, RotateCcw, HardDrive } from 'lucide-react';
 import { type GpuJob } from '../lib/gpu-api';
 import styles from '../gpu.module.css';
 import { formatDateTime, jobSize, progressPercent, readableState, terminalStates } from '../lib/ui-helpers';
@@ -141,7 +141,7 @@ export function TasksPanel({
                 {(running || waiting) && (
                   <div className={styles.progressBlock}>
                     <div className={styles.progressText}>
-                      <span>{running ? (pct !== null ? `生成中 ${pct}%` : '生成中…') : '排队等待中'}</span>
+                      <span>{running ? (isPrep ? (pct !== null ? `正在缓存模型到网盘 ${pct}%` : '正在同步模型到网盘…') : (pct !== null ? `生成中 ${pct}%` : '生成中…')) : '排队等待中'}</span>
                     </div>
                     <div className={styles.progress} data-indeterminate={pct === null}><span style={pct !== null ? { width: `${pct}%` } : undefined} /></div>
                   </div>

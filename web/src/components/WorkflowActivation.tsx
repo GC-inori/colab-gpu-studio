@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   acceptGpuWorkflowSmoke, apiMessage, getGpuComputeSpecs, getGoogleAccounts, getProjects, getWorkflowActivation,
   publishGpuWorkflow, realSmokeGpuWorkflow, reviewGpuModel, reviewGpuWorkflow, validateGpuWorkflow,
-  type ComputeSpec, type GpuWorkflow, type WorkflowActivation,
+  type ComputeSpec, type GpuWorkflow, type WorkflowActivation, type GoogleAccount,
 } from '../lib/gpu-api';
-import { resolveGpuCheckRequest, selectEligibleColabGpuSpec } from '../lib/colab-check';
+import { isColabAccountQueryable, resolveGpuCheckRequest, selectEligibleColabGpuSpec } from '../lib/colab-check';
 import styles from '../gpu.module.css';
 
 const STEPS_POLL_MS = 6000;
@@ -26,6 +26,7 @@ export function WorkflowActivationPanel({
   const [consent, setConsent] = useState(false);
   const [projectId, setProjectId] = useState('');
   const [accountId, setAccountId] = useState('');
+  const [accountList, setAccountList] = useState<GoogleAccount[]>([]);
   const [spec, setSpec] = useState<ComputeSpec | null>(null);
   const [specsLoaded, setSpecsLoaded] = useState(false);
 
@@ -46,6 +47,7 @@ export function WorkflowActivationPanel({
           if (alive) setProjectId(list[0]?.id || '');
         }), getGoogleAccounts()]);
         if (!alive) return;
+        setAccountList(accounts);
         const request = resolveGpuCheckRequest(
           { real_enabled: snapshot.real_enabled, offline_mode: false },
           accounts,
@@ -72,6 +74,21 @@ export function WorkflowActivationPanel({
     void load();
     return () => { alive = false; };
   }, [refresh]);
+
+  const onSelectAccount = async (newAccountId: string) => {
+    setAccountId(newAccountId);
+    setSpecsLoaded(false);
+    setError('');
+    try {
+      const eligible = selectEligibleColabGpuSpec(await getGpuComputeSpecs('colab', newAccountId));
+      if (!eligible) throw new Error('所选账号没有可用的真实 GPU 规格（已过滤 CPU/TPU）');
+      setSpec(eligible);
+    } catch (err) {
+      setError(apiMessage(err));
+    } finally {
+      setSpecsLoaded(true);
+    }
+  };
 
   const stepDone = (key: string) => data?.steps.find((step) => step.key === key)?.done === true;
 
@@ -112,34 +129,46 @@ export function WorkflowActivationPanel({
         await reviewGpuWorkflow(workflow.id);
         snapshot = await refresh();
       }
+
+      // 检查是否有已经跑通的冒烟任务，优先复用，杜绝重复开机扣费
+      const hasCompletedSmoke = Boolean(
+        snapshot.smoke_job_completed ||
+        (snapshot.smoke?.state === 'completed' && snapshot.smoke?.job_id)
+      );
+
       if (!stepDone('real_smoke')) {
-        if (!projectId) throw new Error('请先创建一个项目，冒烟任务要落在项目里');
-        if (!accountId || !spec) throw new Error('当前账号没有可用的 GPU 规格，请先授权 Colab');
-        say('正在提交真实 GPU 冒烟…');
-        await realSmokeGpuWorkflow(
-          workflow.id,
-          {
-            confirmed: true,
-            project_id: projectId,
-            params: {},
-            asset_ids: [],
-            account_id: accountId,
-            // Pass the exact structured key returned by the same account's
-            // read-only discovery call; never coerce it to a string.
-            spec,
-          },
-          `smoke-${workflow.id}-${Date.now()}`,
-        );
-        say('已进入队列，最长 5 分钟');
-        snapshot = await waitForSmoke();
+        if (hasCompletedSmoke) {
+          say('检测到已有完成的冒烟任务，直接进入验收…');
+        } else {
+          if (!projectId) throw new Error('请先创建一个项目，冒烟任务要落在项目里');
+          if (!accountId || !spec) throw new Error('当前账号没有可用的 GPU 规格，请先授权 Colab');
+          say('正在提交真实 GPU 冒烟…');
+          await realSmokeGpuWorkflow(
+            workflow.id,
+            {
+              confirmed: true,
+              project_id: projectId,
+              params: {},
+              asset_ids: [],
+              account_id: accountId,
+              // Pass the exact structured key returned by the same account's
+              // read-only discovery call; never coerce it to a string.
+              spec,
+            },
+            `smoke-${workflow.id}-${Date.now()}`,
+          );
+          say('已进入队列，最长 5 分钟');
+          snapshot = await waitForSmoke();
+        }
       }
-      if (!snapshot.smoke_job_completed) {
+      if (!snapshot.smoke_job_completed && snapshot.smoke?.state !== 'completed') {
         throw new Error(snapshot.smoke?.error_message || '冒烟未通过，详见任务详情');
       }
       if (!stepDone('accept_smoke')) {
-        if (!snapshot.smoke?.job_id) throw new Error('找不到可验收的冒烟任务');
+        const jobId = snapshot.smoke?.job_id;
+        if (!jobId) throw new Error('找不到可验收的冒烟任务');
         say('正在验收冒烟输出…');
-        await acceptGpuWorkflowSmoke(workflow.id, snapshot.smoke.job_id);
+        await acceptGpuWorkflowSmoke(workflow.id, jobId);
         snapshot = await refresh();
       }
       if (!snapshot.done) {
@@ -185,6 +214,27 @@ export function WorkflowActivationPanel({
           </div>
         </details>
       ) : null}
+
+      {accountList.length > 1 && (
+        <div style={{ marginBottom: '12px' }}>
+          <label className="small muted" style={{ display: 'block', marginBottom: '4px' }}>
+            冒烟测试执行账号：
+          </label>
+          <select
+            className="select"
+            value={accountId}
+            disabled={busy || data?.done}
+            onChange={(e) => void onSelectAccount(e.target.value)}
+          >
+            {accountList.filter(isColabAccountQueryable).map((acc) => (
+              <option key={acc.account_id} value={acc.account_id}>
+                {acc.alias || acc.account_id} {acc.email_masked ? `(${acc.email_masked})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <label className={styles.checkline}>
         <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
         <span>我知道会真实开 GPU 并产生费用</span>

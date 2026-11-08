@@ -92,8 +92,26 @@ def _validate_allocation(repo, user, policy: dict) -> dict:
             accounts = repo.list("accounts", user["id"])
         except (AttributeError, KeyError, TypeError, ValueError):
             accounts = []
-        if accounts and not any(_account_is_usable(item) for item in accounts):
+        candidates = [
+            item for item in accounts
+            if _account_is_usable(item)
+            and item.get("allow_allocation", True) is not False
+        ]
+        if accounts and not candidates:
             raise APIError("ACCOUNT_UNAVAILABLE", "没有允许分配且已授权的 Google 账号", 409)
+        # Bind the request to an actual identity before checking OAuth, sampling
+        # its balance, or persisting the execution policy.
+        if candidates:
+            from .gpu.google import GoogleService
+
+            for item in candidates:
+                account_id = item.get("account_id") or item.get("id")
+                if not account_id:
+                    continue
+                status = GoogleService(repo, user["id"], account_id=account_id).status()
+                if status.get("colab", {}).get("connected"):
+                    checked["account_id"] = account_id
+                    break
     return checked
 
 
