@@ -27,7 +27,7 @@ from .batch_routes import build_batch_router
 from .common import APIError, admin, current_user, envelope, get_store, ok, own
 from .compute_routes import _require_account
 from .compute_routes import router as compute_router
-from .config import settings
+from .config import read_yaml_config, set_runtime_setting, settings, write_dotenv_values, write_yaml_config
 from .db import Store
 from .gpu import loras as lora_registry
 from .gpu.compute import GpuConfig, MockColabProvider
@@ -87,6 +87,15 @@ def usage(st, owner):
         for r in real
         if float(r.get("created_epoch", 0)) > now - 86400
     )
+    from datetime import datetime, timezone
+
+    now_utc = datetime.now(timezone.utc)
+    month_start = datetime(now_utc.year, now_utc.month, 1, tzinfo=timezone.utc).timestamp()
+    monthly = sum(
+        float(r.get("units_estimate", r.get("units", 0)) or 0)
+        for r in real
+        if float(r.get("created_epoch", 0)) >= month_start
+    )
     leases = [r for r in repo.list("leases", owner) if r.get("state") != "deleted"]
     measured = [r for r in real if r.get("units_actual") is not None]
     measured_actual = sum(float(r.get("units_actual") or 0) for r in measured)
@@ -118,11 +127,14 @@ def usage(st, owner):
         "estimated_units": estimate if cfg.unit_rate is not None else None,
         "actual_units": measured_actual if measured else None,
         "daily_estimated_units": daily if cfg.unit_rate is not None else None,
+        "monthly_estimated_units": monthly if cfg.unit_rate is not None else None,
         "unit_rate": cfg.unit_rate,
         "rate_unit": "compute_units_per_minute",
         "rate_source": "administrator_estimate" if cfg.unit_rate is not None else "unknown",
         "daily_limit": cfg.daily_units,
         "monthly_limit": cfg.monthly_units,
+        "daily_remaining": max(0.0, cfg.daily_units - daily) if cfg.unit_rate is not None else None,
+        "monthly_remaining": max(0.0, cfg.monthly_units - monthly) if cfg.unit_rate is not None else None,
         "max_job_units": cfg.max_job_units,
         "max_runtime_minutes": cfg.max_runtime_minutes,
         "active_runtimes": len(leases),
@@ -150,6 +162,9 @@ def usage(st, owner):
 
 @asynccontextmanager
 async def lifespan(app):
+    from .logging_conf import configure_logging
+
+    configure_logging()
     if not getattr(app.state, "store", None):
         app.state.store = Store(settings.database_url)
     from .gpu.instances import InstanceService
@@ -728,6 +743,41 @@ def get_settings(request: Request, user=Depends(current_user), st=Depends(get_st
         },
         request,
     )
+
+
+class BudgetUpdate(BaseModel):
+    daily_limit: float | None = Field(default=None, gt=0)
+    monthly_limit: float | None = Field(default=None, gt=0)
+    max_job_units: float | None = Field(default=None, gt=0)
+    max_runtime_minutes: int | None = Field(default=None, gt=0)
+
+
+@router.patch("/settings/budget")
+def update_budget(body: BudgetUpdate, request: Request, user=Depends(current_user), st=Depends(get_store)):
+    admin(user)
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        raise APIError("VALIDATION_ERROR", "至少提供一个预算字段")
+    field_map = {
+        "daily_limit": ("daily_units", "GPU_DAILY_UNITS"),
+        "monthly_limit": ("monthly_units", "GPU_MONTHLY_UNITS"),
+        "max_job_units": ("max_job_units", "GPU_MAX_JOB_UNITS"),
+        "max_runtime_minutes": ("max_runtime_minutes", "GPU_MAX_RUNTIME_MINUTES"),
+    }
+    config = read_yaml_config()
+    gpu = dict(config.get("gpu") or {})
+    dotenv_updates = {}
+    for input_name, value in updates.items():
+        config_field, env_name = field_map[input_name]
+        gpu[config_field] = value
+        os.environ[env_name] = str(value)
+        dotenv_updates[env_name] = value
+        # Keep Settings in step if a future field is also represented there.
+        set_runtime_setting(config_field, value)
+    config["gpu"] = gpu
+    write_yaml_config(config)
+    write_dotenv_values(dotenv_updates)
+    return ok({"budget": usage(st, user["id"])}, request)
 
 
 @router.get("/compute/specs")

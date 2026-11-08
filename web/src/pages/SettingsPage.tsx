@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Settings, ChevronLeft, ChevronRight, Monitor, Gauge, Plug, Cpu, Layers, LogOut, Search, Square } from 'lucide-react';
 import { WorkflowsPanel } from './WorkflowManager';
 import { ThemePicker } from './ComputePage';
-import type { ComputeSpec, GpuSettings, GpuUsage, GpuWorkflow } from '../lib/gpu-api';
+import { updateGpuBudget, type ComputeSpec, type GpuSettings, type GpuUsage, type GpuWorkflow } from '../lib/gpu-api';
 import { GoogleOAuthSetup } from '../components/GoogleOAuthSetup';
 import { AccountDirectory, type GpuAccount } from '../components/AccountDirectory';
 import { InstanceCenter } from '../components/InstanceCenter';
@@ -41,6 +41,12 @@ export function SettingsPanel({
 }) {
   const [view, setView] = useState<'main' | 'workflows'>('main');
   const [oauthConfigured, setOauthConfigured] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [dailyDraft, setDailyDraft] = useState('');
+  const [monthlyDraft, setMonthlyDraft] = useState('');
+  const [savingBudget, setSavingBudget] = useState(false);
+  const [budgetSuccess, setBudgetSuccess] = useState('');
+  const [localUsage, setLocalUsage] = useState<GpuUsage | null | undefined>(undefined);
 
   const activeCount = Number(usage?.active_runtimes ?? 0);
   const dailyCap = Number(usage?.daily_limit || settings?.budget?.daily_units || 0);

@@ -60,6 +60,11 @@ class GpuConfig:
 
     @classmethod
     def from_env(cls) -> "GpuConfig":
+        # Also cover callers that import this module without importing the API
+        # settings module first (for example standalone scheduler processes).
+        from ..config import sync_yaml_to_environment
+
+        sync_yaml_to_environment()
         max_runtime = int(cls._number("GPU_MAX_RUNTIME_MINUTES", 30))
         retries = int(cls._number("GPU_CREATE_RETRIES", 2))
         if max_runtime <= 0 or retries < 0:

@@ -247,6 +247,15 @@ export const cancelGpuJob = (id: string) => apiFetch<GpuJob>(`/api/gpu/jobs/${en
 export const retryGpuJob = (id: string, idempotencyKey: string) => apiFetch<GpuJob>(`/api/gpu/jobs/${encodeURIComponent(id)}/retry`, { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({}) });
 export const getGpuGallery = (projectId: string) => apiFetch<GalleryAsset[]>(`/api/gpu/gallery?project_id=${encodeURIComponent(projectId)}`);
 export const getGpuUsage = () => apiFetch<GpuUsage>('/api/gpu/usage');
+export const updateGpuBudget = (body: { daily_limit?: number; monthly_limit?: number; max_job_units?: number; max_runtime_minutes?: number }, idempotencyKey?: string) =>
+  apiFetch<{ budget: GpuUsage }>('/api/gpu/settings/budget', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
+    body: JSON.stringify(body),
+  });
 export const getGpuSettings = () => apiFetch<GpuSettings>('/api/gpu/settings');
 export const getGpuComputeSpecs = (provider: Provider, accountId?: string | null) => {
   const query = `provider=${encodeURIComponent(provider)}`;

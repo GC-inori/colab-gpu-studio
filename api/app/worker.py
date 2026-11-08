@@ -25,7 +25,9 @@ def main():
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval", type=float, default=2)
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
+    from .logging_conf import configure_logging
+
+    configure_logging()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     store = Store(settings.database_url)

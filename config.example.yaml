@@ -1,0 +1,33 @@
+server:
+  site_url: http://localhost:8788
+  bind_ip: 127.0.0.1
+  bind_port: 8788
+  environment: development
+  max_upload_bytes: 104857600
+
+security:
+  studio_password: ""
+  encryption_key: ""
+  session_secret: ""
+  studio_api_token: ""
+
+gpu:
+  enabled: true
+  real_enabled: false
+  storage: local
+  unit_rate: null
+  daily_units: 10
+  monthly_units: 100
+  max_job_units: 5
+  max_runtime_minutes: 30
+  google_client_id: ""
+  google_client_secret: ""
+  google_redirect_uri: ""
+
+logging:
+  enabled: true
+  level: INFO
+  file: logs/studio.log
+  max_bytes: 10485760
+  backup_count: 5
+  compress: true
